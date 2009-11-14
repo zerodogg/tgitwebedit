@@ -113,8 +113,11 @@ sub header
 	$o .= '<script src="http://yui.yahooapis.com/2.8.0r4/build/container/container_core-min.js"></script>';
 	$o .= '<script src="http://yui.yahooapis.com/2.8.0r4/build/editor/simpleeditor-min.js"></script>';
 	$o .= '<script type="text/javascript">function tglog(msg) {  if(typeof(msg) == "object") { msg = "Exception: "+msg.message }; if(console && console.log) { console.log(msg); } }</script>';
+	$o .= '<script type="text/javascript">var $ = function (i) { return document.getElementById(i); };</script>';
 	$o .= '</head><body class="yui-skin-sam">';
-	$o .= '<div id="header"><h3>TGitWebEdit</h3><hr /><br /></div><div id="primaryContent">';
+	$o .= '<div id="header"><h3>TGitWebEdit</h3>';
+	$o .= '<a href="'.$q->url().'">File list</a>';
+	$o .= '<hr /><br /></div><div id="primaryContent">';
 	$reqHeader = true;
 	return $o;
 }
@@ -138,27 +141,31 @@ sub editFile
 	{
 		error('Illegal path');
 	}
-	elsif(not -e $file)
-	{
-		error($file.': does not exist');
-	}
-	elsif(-d $file)
-	{
-		error($file.': is a directory');
-	}
-	elsif(-x $file)
-	{
-		error($file.': is executable. Refusing to edit an executeable file.');
-	}
+	my $c = '';
 	print header('Editing '.basename($file));
-	my $c;
-	open(my $i,'<',$file);
-	undef $/;
-	$c = <$i>;
-	close($i);
+	if (-e $file)
+	{
+		if(-d $file)
+		{
+			error($file.': is a directory');
+		}
+		elsif(-x $file)
+		{
+			error($file.': is executable. Refusing to edit an executeable file.');
+		}
+		my $c;
+		open(my $i,'<',$file);
+		undef $/;
+		$c = <$i>;
+		close($i);
+		if(not -w $file)
+		{
+			print '<b>WARNING: </b>This file is not writeable, you will not be able to save any changes!<br /><br />';
+		}
+	}
 	print '<form name="editor" method="post" action="'.$q->url().'?type=file_save'.'">';
 	print '<input type="hidden" name="type" value="file_save" />';
-	print '<input type="hidden" name="filePath" value="'.$file.'" />';
+	print '<input type="hidden" name="filePath" value="'.relativeRestrictedPath($file).'" />';
 	print textEditor($c,$file);
 	print '<br /><input type="submit" />';
 	print '</form>';
@@ -167,6 +174,46 @@ sub editFile
 
 sub saveFile
 {
+	my $content = $q->param('mainEditor');
+	if(not defined $content)
+	{
+		error('No content submitted');
+	}
+	my $errc = '<br /><br />The data you submitted is included below so that you may save it some other way until you are able to fix this issue.<br /><textarea rows="5" cols="50">'.$content.'</textarea>';
+
+	my $file = $q->param('filePath');
+	if(not defined $file or not length $file)
+	{
+		error('saveFile(): no filePath!'.$errc);
+	}
+	$file = realpath(confVal('restrictedPath').'/'.$file);
+	if(not defined $file or not length $file)
+	{
+		error('Illegal path'.$errc);
+	}
+	if (-e $file)
+	{
+		if(-d $file)
+		{
+			error($file.': is a directory'.$errc);
+		}
+		elsif(-x $file)
+		{
+			error($file.': is executable. Refusing to edit an executeable file.'.$errc);
+		}
+		elsif(not -w $file)
+		{
+			error($file.': is not writeable by tgitwebedit (running as UID '.$<.'). Data could not be saved.'.$errc);
+		}
+	}
+
+	open(my $out,'>',$file) or error('Failed to open '.$file.' for writing: '.$!);
+	print {$out} $content;
+	close($out);
+
+	print header();
+	print 'The file was saved successfully';
+	print footer();
 }
 
 sub textEditor
@@ -186,14 +233,13 @@ function toggleRTE()
 			RTE.saveHTML();
 			RTE.destroy();
 			RTE = null;
-			tglog("Destroyed RTE");
 		}
 		rteON = false;
+		$("rtestatus").innerHTML = "on";
 	}
 	else
 	{
 		rteON = true;
-		tglog("Creating RTE obj");
 		try
 		{
 			RTE = new YAHOO.widget.SimpleEditor("mainEditor", { handleSubmit: true });
@@ -202,12 +248,12 @@ function toggleRTE()
 		{
 			tglog(error);
 		}
-		tglog("Created RTE obj");
 		RTE.render();
+		$("rtestatus").innerHTML = "off";
 	}
 }</script>';
-	$o .= '<b>'.$file.'</b>:<br />';
-	$o .= '<a href="#" onclick="try { toggleRTE(); } catch(e) {tglog(e);}; return false">Toggle graphical (HTML) editor on/off</a><br />';
+	$o .= '<b>'.basename($file).'</b>:<br />';
+	$o .= '<a href="#" onclick="try { toggleRTE(); } catch(e) {tglog(e);}; return false">Toggle graphical (HTML) editor <span id="rtestatus">on</span></a></a><br />';
 	$o .= '<textarea name="mainEditor" id="mainEditor" cols="100" rows=30">'.$content.'</textarea>';
 	return $o;
 }
@@ -215,12 +261,7 @@ function toggleRTE()
 sub URL_fileSelector
 {
 	my $file = shift;
-	$file = realpath($file);
-	if ($file =~ m{^/})
-	{
-		my $rpath = confVal('restrictedPath');
-		$file =~ s/$rpath//;
-	}
+	$file = relativeRestrictedPath($file);
 	my $p = $q->url().'?type=file_list&dirPath='.$file;
 	return encode_entities($p);
 }
@@ -228,12 +269,7 @@ sub URL_fileSelector
 sub URL_editFile
 {
 	my $file = shift;
-	$file = realpath($file);
-	if ($file =~ m{^/})
-	{
-		my $rpath = confVal('restrictedPath');
-		$file =~ s/$rpath//;
-	}
+	$file = relativeRestrictedPath($file);
 	my $p = $q->url().'?type=file_edit&filePath='.$file;
 	return encode_entities($p);
 }
@@ -316,6 +352,15 @@ sub fileSelector
 	print footer();
 }
 
+sub relativeRestrictedPath
+{
+	my $path = shift;
+	$path = realpath($path);
+	my $rpath = confVal('restrictedPath');
+	$path =~ s/$rpath//;
+	return $path;
+}
+
 sub safePath
 {
 	my $path = shift;
@@ -349,6 +394,10 @@ sub main
 	elsif($type eq 'file_edit')
 	{
 		editFile();
+	}
+	elsif($type eq 'file_save')
+	{
+		saveFile();
 	}
 	elsif(defined $type and length($type))
 	{
