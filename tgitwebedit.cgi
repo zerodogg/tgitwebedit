@@ -120,6 +120,8 @@ sub header
 		$o .= ' - '.$title;
 	}
 	$o .= '</title>';
+	$o .= '<meta name="robots" content="noindex, nofollow" />';
+	$o .= '<meta http-equiv="Content-Type" content="text/html charset=UTF-8" />';
 	# YUI
 	$o .= '<link rel="stylesheet" type="text/css" href="http://yui.yahooapis.com/2.8.0r4/build/assets/skins/sam/skin.css" />';
 	$o .= '<script type="text/javascript" src="http://yui.yahooapis.com/2.8.0r4/build/yahoo-dom-event/yahoo-dom-event.js"></script>';
@@ -192,7 +194,7 @@ sub editFile
 		}
 	}
 	print header('Editing '.basename($file));
-	if($canSave)
+	if(not $canSave)
 	{
 		print '<b>WARNING: </b>This file is not writeable, you will not be able to save any changes!<br /><br />';
 	}
@@ -250,6 +252,12 @@ sub saveFile
 	open(my $out,'>',$file) or error('Failed to open '.$file.' for writing: '.$!);
 	print {$out} $content;
 	close($out);
+
+	if (confVal('enableGit'))
+	{
+		system('git','add',$file);
+		system('git','commit','-m', 'Changes made by '.$q->remote_host());
+	}
 
 	print header();
 	print 'The file was saved successfully';
@@ -493,3 +501,30 @@ catch
 	};
 
 };
+
+__END__
+
+=head1 NAME
+
+=head1 DESCRIPTION
+
+=head1 CONFIGURATION
+
+=head1 CUSTOMIZATION
+
+tgitwebedit can have additional customizations applied, in addition to
+what is already offered by the configuration options. You can create a
+custom menu, or a custom entry page.
+
+=head2 Custom menu
+
+By default tgitwebedit will create its own menu. However, if you want to
+replace it with a custom menu, just create I<custom_menu.html>
+
+=head2 Custom entry page
+
+The entry page is the page that is first showed when you enter tgitwebedit.
+By default the root file list will be showed, however if you edit/create
+I<custom_index.html> you can add any custom welcome page you want.
+
+=head1 LICENSE AND COPYRIGHT
