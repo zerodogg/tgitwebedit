@@ -21,8 +21,8 @@ use CGI;
 use FindBin;
 use lib "$FindBin::RealBin/lib/";
 use Try::Tiny;
+use File::Basename qw(basename dirname);
 use autouse 'Cwd' => qw(realpath);
-use autouse 'File::Basename' => qw(basename);
 use autouse 'HTML::Entities' => qw(encode_entities);
 
 use constant { true => 1, false => 0 };
@@ -30,6 +30,8 @@ use constant { true => 1, false => 0 };
 my $q;
 my $reqHeader = false;
 my $VERSION = '0.1';
+my $instDir = dirname($0);
+my $menuSlurp = false;
 my %conf;
 
 # Purpose: Load a configuration file
@@ -75,6 +77,18 @@ sub LoadConfigFile
 	close($CONFIG);
 }
 
+sub slurp
+{
+	my $file = shift;
+	my $o = $/;
+	undef $/;
+	open(my $i,'<',$file) or return;
+	my $r = <$i>;
+	$/ = $o;
+	close($i);
+	return $r;
+}
+
 sub confVal
 {
 	my $val = shift;
@@ -112,11 +126,26 @@ sub header
 	$o .= '<script type="text/javascript" src="http://yui.yahooapis.com/2.8.0r4/build/element/element-min.js"></script>';
 	$o .= '<script src="http://yui.yahooapis.com/2.8.0r4/build/container/container_core-min.js"></script>';
 	$o .= '<script src="http://yui.yahooapis.com/2.8.0r4/build/editor/simpleeditor-min.js"></script>';
+	# Scripts
 	$o .= '<script type="text/javascript">function tglog(msg) {  if(typeof(msg) == "object") { msg = "Exception: "+msg.message }; if(console && console.log) { console.log(msg); } }</script>';
 	$o .= '<script type="text/javascript">var $ = function (i) { return document.getElementById(i); };</script>';
-	$o .= '</head><body class="yui-skin-sam">';
+	$o .= '<script type="text/javascript">var runToggleRTE = false; function onloadRunner () { if (runToggleRTE) { toggleRTE(); } };</script>';
+	$o .= '</head><body class="yui-skin-sam" onload="onloadRunner();">';
 	$o .= '<div id="header"><h3>TGitWebEdit</h3>';
-	$o .= '<a href="'.$q->url().'">File list</a>';
+	$o .= '<span id="menu">';
+	if (not $menuSlurp and -e $instDir.'/custom_menu.html')
+	{
+		$menuSlurp = true;
+		$o .= slurp($instDir.'/custom_menu.html') or error('Failed to slurp the menu: '.$!);
+	}
+	else
+	{
+		if (-e $instDir.'/custom_index.html')
+		{
+			$o .= '<a href="'.$q->url().'">Main page</a> - ';
+		}
+		$o .= '<a href="'.$q->url().'?type=file_list">File list</a>';
+	}
 	$o .= '<hr /><br /></div><div id="primaryContent">';
 	$reqHeader = true;
 	return $o;
@@ -142,7 +171,7 @@ sub editFile
 		error('Illegal path');
 	}
 	my $c = '';
-	print header('Editing '.basename($file));
+	my $canSave = true;
 	if (-e $file)
 	{
 		if(-d $file)
@@ -153,21 +182,32 @@ sub editFile
 		{
 			error($file.': is executable. Refusing to edit an executeable file.');
 		}
-		my $c;
 		open(my $i,'<',$file);
 		undef $/;
 		$c = <$i>;
 		close($i);
 		if(not -w $file)
 		{
-			print '<b>WARNING: </b>This file is not writeable, you will not be able to save any changes!<br /><br />';
+			$canSave = false;
 		}
+	}
+	print header('Editing '.basename($file));
+	if($canSave)
+	{
+		print '<b>WARNING: </b>This file is not writeable, you will not be able to save any changes!<br /><br />';
 	}
 	print '<form name="editor" method="post" action="'.$q->url().'?type=file_save'.'">';
 	print '<input type="hidden" name="type" value="file_save" />';
 	print '<input type="hidden" name="filePath" value="'.relativeRestrictedPath($file).'" />';
 	print textEditor($c,$file);
-	print '<br /><input type="submit" />';
+	print '<br />';
+	if ($canSave)
+	{
+		print '<input type="submit" value="Save file" />&nbsp;';
+	}
+	# FIXME: Add some magic so that if the back fails, we still forward
+	# to url()
+	print '<a href="'.$q->url().'"><input type="button" value="Cancel and discard changes" onclick="window.history.back(); return false;"></a>';
 	print '</form>';
 	print footer();
 }
@@ -255,6 +295,10 @@ function toggleRTE()
 	$o .= '<b>'.basename($file).'</b>:<br />';
 	$o .= '<a href="#" onclick="try { toggleRTE(); } catch(e) {tglog(e);}; return false">Toggle graphical (HTML) editor <span id="rtestatus">on</span></a></a><br />';
 	$o .= '<textarea name="mainEditor" id="mainEditor" cols="100" rows=30">'.$content.'</textarea>';
+	if ($content  =~ /<\s*br\s*[^>]>/i)
+	{
+		$o .= '<script type="text/javascript">runToggleRTE = true;</script>';
+	}
 	return $o;
 }
 
@@ -381,13 +425,32 @@ sub error
 	exit(1);
 }
 
+sub defaultPage
+{
+	if (-e $instDir.'/custom_index.html')
+	{
+		print header();
+		my $cust = slurp($instDir.'/custom_index.html') or error('Failed to slupr the custom index: '.$!);
+		print $cust;
+		print footer();
+	}
+	else
+	{
+		fileSelector();
+	}
+}
+
 sub main
 {
 	$q = CGI->new;
 	my $type = $q->param('type');
-	$type = defined $type ? $type : 'file_list';
+	$type = defined $type ? $type : 'default';
 
-	if   ($type eq 'file_list')
+	if   ($type eq 'default')
+	{
+		defaultPage();
+	}
+	elsif($type eq 'file_list')
 	{
 		fileSelector();
 	}
