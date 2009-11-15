@@ -38,8 +38,8 @@ my %conf;
 # Usage: LoadConfigFile(/FILE, \%ConfigHash, \%OptionRegexHash, OnlyValidOptions?);
 #  OptionRegeXhash can be available for only a select few of the config options
 #  or skipped completely (by replacing it by undef).
-#  If OnlyValidOptions is true it will cause LoadConfigFile to skip options not in
-#  the OptionRegexHash.
+#  If OnlyValidOptions is true it will cause LoadConfigFile to skip options
+#  not in the OptionRegexHash.
 sub LoadConfigFile
 {
 	my ($File, $ConfigHash, $OptionRegex, $OnlyValidOptions) = @_;
@@ -453,6 +453,11 @@ sub main
 	$q = CGI->new;
 	my $type = $q->param('type');
 	$type = defined $type ? $type : 'default';
+
+	if(not -e $instDir.'/.htaccess')
+	{
+		error($isntDir.'/.htaccess: does not exist, refusing to continue.<br />tgitwebedit does not contain any authentication support, and you must therefore use HTTP auth. When .htaccess does not exist, tgitwebedit assumes no authentication is being used and refuses to work.');
+	}
 
 	if   ($type eq 'default')
 	{
