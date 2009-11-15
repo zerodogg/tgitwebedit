@@ -119,17 +119,15 @@ sub confVal
 	my $val = shift;
 	if(not keys %conf)
 	{
+		# Conf defaults
+		%conf = (
+			'restrictedPath' => '.',
+			'enableGit' => 'true',
+			'useApacheStock' => 'true',
+		);
 		if (-e './tgitwebedit.conf')
 		{
 			LoadConfigFile('./tgitwebedit.conf',\%conf);
-		}
-		else
-		{
-			# If there isn't any conf file, use our sane defaults
-			%conf = (
-				'restrictedPath' => '.',
-				'enableGit' => 'true',
-			);
 		}
 		if(not $conf{restrictedPath} =~ /^\//)
 		{
@@ -405,7 +403,7 @@ sub fileListing
 	my @dirs = sort(glob($dir.'/*'));
 	if(not realpath($dir) eq realpath(confVal('restrictedPath')))
 	{
-		unshift(@dirs,{ url => URL_fileSelector($dir.'/../'), label => '[DIR]', name => '.. (one level up)' });
+		unshift(@dirs,{ url => URL_fileSelector($dir.'/../'), label => '[UP]', name => '.. (one level up)' });
 	}
 	else
 	{
@@ -439,7 +437,29 @@ sub fileListing
 			$name = $b;
 		}
 		$l .= '<tr><td>';
-		$l .= $label;
+		if (confVal('useApacheStock') && confVal('useApacheStock') eq 'true')
+		{
+			if ($label eq '[DIR]')
+			{
+				$l .= '<img src="/icons/folder.png" alt="[DIR]" />';
+			}
+			elsif($label eq '[UP]')
+			{
+				$l .= '<img src="/icons/back.png" alt="[UP]" />';
+			}
+			elsif($label eq '[FILE]')
+			{
+				$l .= '<img src="/icons/text.png" alt="[FILE]" />';
+			}
+			else
+			{
+				$l .= $label;
+			}
+		}
+		else
+		{
+			$l .= $label;
+		}
 		$l .= '</td><td>';
 		if(defined $url and length $url)
 		{
@@ -703,6 +723,10 @@ default installation is included below.
 	# git for revision control of changes. Setting it to 0 disables this
 	# feature.
 	enableGit=true
+
+	# If this is set to true then tgitwebedit will attempt to use apache
+	# stock icons for directories and files.
+	useApacheStock=true
 
 =head1 CUSTOMIZATION
 
