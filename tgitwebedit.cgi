@@ -456,7 +456,7 @@ sub main
 
 	if(not -e $instDir.'/.htaccess')
 	{
-		error($isntDir.'/.htaccess: does not exist, refusing to continue.<br />tgitwebedit does not contain any authentication support, and you must therefore use HTTP auth. When .htaccess does not exist, tgitwebedit assumes no authentication is being used and refuses to work.');
+		error($instDir.'/.htaccess: does not exist, refusing to continue.<br />tgitwebedit does not contain any authentication support, and you must therefore use HTTP auth. When .htaccess does not exist, tgitwebedit assumes no authentication is being used and refuses to work.');
 	}
 
 	if   ($type eq 'default')
