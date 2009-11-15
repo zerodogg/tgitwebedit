@@ -171,7 +171,8 @@ sub header
 	$o .= '<script type="text/javascript">var $ = function (i) { return document.getElementById(i); };</script>';
 	$o .= '<script type="text/javascript">var runToggleRTE = false; function onloadRunner () { if (runToggleRTE) { toggleRTE(); } };</script>';
 	$o .= '</head><body class="yui-skin-sam" onload="onloadRunner();">';
-	$o .= '<div id="header"><h3>TGitWebEdit</h3>';
+	$o .= '<div id="header"><h3>TGitWebEdit</h3>'."\n";
+	$o .= '<!-- You can retrieve the source for this instance of tgitwebedit by visiting: '.$q->url().'?type=source -->'."\n";
 	$o .= '<span id="menu">';
 	if (not $menuSlurp and -e $instDir.'/custom_menu.html')
 	{
@@ -589,9 +590,108 @@ __END__
 
 =head1 NAME
 
+tgitwebedit - a simple web-based editor for static content that can use git
+for revision control of changes.
+
 =head1 DESCRIPTION
 
+tgitwebedit is a simple web-based editor for static content that can use git
+for revision control of changes. For lack of a better term it can be called
+a single-file "CMS", althoguh it doesn't actually provide any means of serving
+the content, or managing how something is served. It provides a simple web UI
+for editing static files that can then be served through existing scripts,
+or as completely static HTML pages.
+
+=head1 INSTALLATION
+
+Installation of tgitwebedit is completely straightforward. Follow
+either the quick or full instructions below.
+
+=head2 Quick instructions
+
+	- Configure it by editing tgitwebedit.conf
+	- Set up basic HTTP authentication for the current directory
+		(tgitwebedit does no authentication on its own)
+	- Upload to the web server, ensuring that tgitwebedit.cgi
+		is executable, and any files it should edit is writable
+		by the web server.
+	- Optionally, create the git repository that should contain the
+		data.
+
+=head2 Full instructions
+
+=over
+
+=item B<Step 1> - Preparation
+
+Decide if you want to use the configuration file (you probably do, though 
+tgitwebedit will work fine without it, it'll just use some sane defaults).
+If you don't, skip to step 3.
+
+=item B<Step 2> - Configuration
+
+Edit the tgitwebedit.conf file to suit your needs.
+
+=item B<Step 3> - Securing
+
+tgitwebedit does not contain any builtin authentication. Therefore
+you will need to use basic http authentication. Now is the time
+to configure this, ie. in your .htaccess and .htpasswd files.
+
+=head3 Instructions on setting up basic HTTP auth for apache:
+
+Create a I<.htaccess> like so:
+
+	AuthType Basic
+	AuthName "tgitwebedit"
+	AuthUserFile /path/on/webserver/to/.htpasswd
+	Require user USER_FROM_HTPASSWD
+
+Then create a htpasswd file using the apache htpasswd tool. Not all
+distros put this into PATH, so you may need to use locate to find
+out where it is.
+
+	$ htpasswd .htpasswd USER
+
+=item B<Step 4> - Upload
+
+Upload tgitwebdit.cgi (and tgitwebedit.conf if you use it), along with the
+authentication files you created in step 3 to the directory you want tgitwebdit
+to run from on your web server. Make sure tgitwebedit.cgi is executable by your
+user, and that the files you want it to be able to edit is writable by
+the user running the web-server.
+
+If you want to use the git revision-control features as well, you need to
+create the git repository that should contain the data (and ensure
+that the git repository is writable by the web server). As long as the
+directories containing the files tgitwebedit can edit is contained inside that
+tree, tgitwebedit will start using it automatically.
+
+That's it. tgitwebedit is now ready to be used.
+
+=back
+
 =head1 CONFIGURATION
+
+The configuration for tgitwebedit is contained in the tgitwebedit.conf
+file in the same directory as tgitwebedit.cgi. It should be fairly
+straightforward to configure. The configuration file as it looks in a
+default installation is included below.
+
+=head2 Default configuration file
+
+	# Configuration file for tgitwebedit
+
+	# This is the path under which files can be edited.
+	# The path can be relative to the directory containing tgitwebedit,
+	# or it can be a fully qualified path. Relative paths are resolved during
+	# runtime.
+	restrictedPath=.
+
+	# If this is set to any value OTHER than 0 then tgitwebedit will use
+	# git for revision control of changes. Setting it to 0 disables this
+	# feature.
+	enableGit=true
 
 =head1 CUSTOMIZATION
 
