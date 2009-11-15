@@ -164,10 +164,10 @@ sub header
 	$o .= '<link rel="stylesheet" type="text/css" href="http://yui.yahooapis.com/2.8.0r4/build/assets/skins/sam/skin.css" />';
 	$o .= '<script type="text/javascript" src="http://yui.yahooapis.com/2.8.0r4/build/yahoo-dom-event/yahoo-dom-event.js"></script>';
 	$o .= '<script type="text/javascript" src="http://yui.yahooapis.com/2.8.0r4/build/element/element-min.js"></script>';
-	$o .= '<script src="http://yui.yahooapis.com/2.8.0r4/build/container/container_core-min.js"></script>';
-	$o .= '<script src="http://yui.yahooapis.com/2.8.0r4/build/editor/simpleeditor-min.js"></script>';
+	$o .= '<script type="text/javascript" src="http://yui.yahooapis.com/2.8.0r4/build/container/container_core-min.js"></script>';
+	$o .= '<script type="text/javascript" src="http://yui.yahooapis.com/2.8.0r4/build/editor/simpleeditor-min.js"></script>';
 	# Scripts
-	$o .= '<script type="text/javascript">function tglog(msg) {  if(typeof(msg) == "object") { msg = "Exception: "+msg.message }; if(console && console.log) { console.log(msg); } }</script>';
+	$o .= '<script type="text/javascript">/* <![CDATA[ */ function tglog(msg) {  if(typeof(msg) == "object") { msg = "Exception: "+msg.message }; if(console && console.log) { console.log(msg); } } /* ]]> */</script>';
 	$o .= '<script type="text/javascript">var $ = function (i) { return document.getElementById(i); };</script>';
 	$o .= '<script type="text/javascript">var runToggleRTE = false; function onloadRunner () { if (runToggleRTE) { toggleRTE(); } };</script>';
 	$o .= '</head><body class="yui-skin-sam" onload="onloadRunner();">';
@@ -187,7 +187,7 @@ sub header
 		}
 		$o .= '<a href="'.$q->url().'?type=file_list">File list</a>';
 	}
-	$o .= '<hr /><br /></div><div id="primaryContent">';
+	$o .= '</span></div><hr /><div id="primaryContent"><br />';
 	$reqHeader = true;
 	return $o;
 }
@@ -258,7 +258,7 @@ sub editFile
 	}
 	# FIXME: Add some magic so that if the back fails, we still forward
 	# to url()
-	print '<a href="'.$q->url().'"><input type="button" value="Cancel and discard changes" onclick="window.history.back(); return false;"></a>';
+	print '<a href="'.$q->url().'"><input type="button" value="Cancel and discard changes" onclick="window.history.back(); return false;" /></a>';
 	print '</form>';
 	print footer();
 }
@@ -355,7 +355,7 @@ function toggleRTE()
 	}
 }</script>';
 	$o .= '<b>'.basename($file).'</b>:<br />';
-	$o .= '<a href="#" onclick="try { toggleRTE(); } catch(e) {tglog(e);}; return false">Toggle graphical (HTML) editor <span id="rtestatus">on</span></a></a><br />';
+	$o .= '<a href="#" onclick="try { toggleRTE(); } catch(e) {tglog(e);}; return false">Toggle graphical (HTML) editor <span id="rtestatus">on</span></a><br />';
 	$o .= '<textarea name="mainEditor" id="mainEditor" cols="100" rows=30">'.$content.'</textarea>';
 	if ($content  =~ /<\s*br\s*[^>]>/i)
 	{
@@ -435,7 +435,7 @@ sub fileListing
 			$name = '<a href="'.$url.'">'.$name.'</a>';
 		}
 		$l .= $name;
-		$l .= '</a></td></tr>';
+		$l .= '</td></tr>';
 	}
 	$l .= '</table>';
 	return $l;
