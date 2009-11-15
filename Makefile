@@ -1,5 +1,7 @@
 prepare:
 	perl -Ilib -MTry::Tiny -e '' || make fetchtiny
+clean:
+	rm -f *~
 # Fetches Try::Tiny for those that need it
 fetchtiny:
 	mkdir -p lib/Try/
