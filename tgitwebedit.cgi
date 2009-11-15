@@ -247,7 +247,8 @@ sub editFile
 	{
 		print '<b>WARNING: </b>This file is not writeable, you will not be able to save any changes!<br /><br />';
 	}
-	print '<form name="editor" method="post" action="'.$q->url().'?type=file_save'.'">';
+	print '<form method="post" action="'.$q->url().'?type=file_save'.'">';
+	print '<div>';
 	print '<input type="hidden" name="type" value="file_save" />';
 	print '<input type="hidden" name="filePath" value="'.relativeRestrictedPath($file).'" />';
 	print textEditor($c,$file);
@@ -259,6 +260,7 @@ sub editFile
 	# FIXME: Add some magic so that if the back fails, we still forward
 	# to url()
 	print '<a href="'.$q->url().'"><input type="button" value="Cancel and discard changes" onclick="window.history.back(); return false;" /></a>';
+	print '</div>';
 	print '</form>';
 	print footer();
 }
@@ -324,6 +326,7 @@ sub textEditor
 	my $file = shift;
 	my $o = ''; 
 	$o .= '<script type="text/javascript">
+//<![CDATA[
 var rteON = false;
 var RTE = null;
 function toggleRTE()
@@ -353,10 +356,10 @@ function toggleRTE()
 		RTE.render();
 		$("rtestatus").innerHTML = "off";
 	}
-}</script>';
+} /* ]]> */</script>';
 	$o .= '<b>'.basename($file).'</b>:<br />';
 	$o .= '<a href="#" onclick="try { toggleRTE(); } catch(e) {tglog(e);}; return false">Toggle graphical (HTML) editor <span id="rtestatus">on</span></a><br />';
-	$o .= '<textarea name="mainEditor" id="mainEditor" cols="100" rows=30">'.$content.'</textarea>';
+	$o .= '<textarea name="mainEditor" id="mainEditor" cols="100" rows="30">'.$content.'</textarea>';
 	if ($content  =~ /<\s*br\s*[^>]>/i)
 	{
 		$o .= '<script type="text/javascript">runToggleRTE = true;</script>';
