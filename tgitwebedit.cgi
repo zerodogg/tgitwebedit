@@ -221,6 +221,10 @@ sub editFile
 	{
 		error('Illegal path');
 	}
+	elsif ($file eq realpath($instDir.'/tgitwebedit.conf'))
+	{
+		error('Editing the tgitwebedit.conf file is not permitted.');
+	}
 	my $c = '';
 	my $canSave = true;
 	if (-e $file)
@@ -285,6 +289,10 @@ sub saveFile
 	if(not defined $file or not length $file)
 	{
 		error('Illegal path'.$errc);
+	}
+	elsif ($file eq realpath($instDir.'/tgitwebedit.conf'))
+	{
+		error('Editing the tgitwebedit.conf file is not permitted.');
 	}
 	if (-e $file)
 	{
