@@ -366,7 +366,7 @@ function toggleRTE()
 	$o .= '<b>'.basename($file).'</b>:<br />';
 	$o .= '<a href="#" onclick="try { toggleRTE(); } catch(e) {tglog(e);}; return false">Toggle graphical (HTML) editor <span id="rtestatus">on</span></a><br />';
 	$o .= '<textarea name="mainEditor" id="mainEditor" cols="100" rows="30">'.$content.'</textarea>';
-	if ($content  =~ /<\s*br\s*[^>]>/i)
+	if ($content  =~ /<\s*(br|p)\s*[^>]>/i and not $content =~ /<\?\s*php/)
 	{
 		$o .= '<script type="text/javascript">runToggleRTE = true;</script>';
 	}
@@ -399,6 +399,11 @@ sub fileListing
 {
 	my $dir = shift;
 	my $l = '<b>'.$dir.'</b>:<br />';
+	if (-w $dir || 1)
+	{
+		$l .= '<span id="mkdir" style="display:none;"><form method="get" action="'.$q->url().'"><span>Directory name: <input type="text" name="dirname" /> <input type="submit" value="Create" /> <input type="hidden" name="type" value="mkdir" /><input type="hidden" name="currDir" value="'.$dir.'" /></span></form></span>';
+		$l .= '<a id="mkdirP" href="#" onclick="$(\'mkdir\').style.display = \'block\'; $(\'mkdirP\').style.display = \'none\'; return false">New directory</a>';
+	}
 	$l .= '<table style="border:0px;">';
 	my @dirs = sort(glob($dir.'/*'));
 	if(not realpath($dir) eq realpath(confVal('restrictedPath')))
