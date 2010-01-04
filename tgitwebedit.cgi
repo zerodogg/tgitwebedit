@@ -19,6 +19,7 @@ use strict;
 use warnings;
 use CGI;
 use FindBin;
+use IPC::Open3 qw(open3);
 use lib "$FindBin::RealBin/lib/";
 use Try::Tiny;
 use File::Basename qw(basename dirname);
@@ -33,6 +34,7 @@ my $reqHeader = false;
 my $VERSION = '0.1';
 my $instDir = dirname($0);
 my $menuSlurp = false;
+my $defaultCharset = 'UTF-8';
 my %conf;
 
 # Purpose: Load a configuration file
@@ -44,6 +46,7 @@ my %conf;
 sub LoadConfigFile
 {
 	my ($File, $ConfigHash, $OptionRegex, $OnlyValidOptions) = @_;
+	assert(@_);
 
 	open(my $CONFIG, '<', "$File") or do {
 		warn(sprintf('Unable to read the configuration settings from %s: %s', $File, $!));
@@ -78,6 +81,85 @@ sub LoadConfigFile
 	close($CONFIG);
 }
 
+# Purpose: Get the charset of a file
+# Usage: getCharsetOf(path/to/file);
+sub getCharsetOf
+{
+	my $path = shift;
+	if (!InPath('file'))
+	{
+		twarn('The "file" utility is missing. Charset detection is not possible. Defaulting to '.$defaultCharset);
+		return $defaultCharset;
+	}
+	if(not -e $path)
+	{
+		twarn('Tried to get charset of non-existing file: '.$path);
+		return $defaultCharset;
+	}
+	my $pid = open3(my $in, my $out, my $err,'file','--mime',$path);
+	if(not $pid)
+	{
+		twarn('Failed to open communication to "file": '.$!);
+		return $defaultCharset;
+	}
+	my $info = <$out>;
+	waitpid($pid,0);
+	if (not $info =~ /charset/)
+	{
+		# If it has no charset, but has a something/something - we assume that
+		# it is a binary file.
+		if ($info =~ m{: \S+/\S+\s*$})
+		{
+			return 'binary';
+		}
+		twarn('Failed to parse output from "file": '.$info.' - defaulting to '.$defaultCharset);
+		return $defaultCharset;
+	}
+	$info =~ s/\r?\n//g;
+	$info =~ s/.*charset=(\S+).*/$1/;
+	if(not length $info)
+	{
+		twarn('"file" did not return a usable charset, defaulting to '.$defaultCharset);
+		return $defaultCharset;
+	}
+	$info =~ tr/a-z/A-Z/;
+
+	# Perform replacements
+	my %replace = (
+		# US-ASCII can just as fine be UTF-8
+		'US-ASCII' => 'UTF-8',
+	);
+	if ($replace{$info})
+	{
+		$info = $replace{$info};
+	}
+	return $info;
+}
+
+# Purpose: Assert a statment
+# Usage: assert(some boolean, fatal?);
+# If the boolean is false, twarn() will be called. If the boolean is true,
+# nothing happens.
+# If fatal is true, then error() will be called in place of twarn();
+sub assert
+{
+	my($bool,$fatal) = @_;
+	if ($bool)
+	{
+		return;
+	}
+	my @info = caller;
+	my $message = 'failed at line '.$info[2].' in '.$info[1].' ('.$info[0].')';
+	if ($fatal)
+	{
+		error('Essential assertion '.$message);
+	}
+	else
+	{
+		twarn('Assertion '.$message);
+	}
+}
+
 # Purpose: Add a warning to be output on the page being generated
 # Usage: twarn(message);
 sub twarn
@@ -99,6 +181,13 @@ sub slurp
 	$/ = $o;
 	close($i);
 	return $r;
+}
+
+# Purpose: Check for a file in path
+# Usage: InPath(FILE)
+sub InPath
+{
+	foreach (split /:/, $ENV{PATH}) { if (-x "$_/@_" and ! -d "$_/@_" ) {	return "$_/@_"; } } return false;
 }
 
 # Purpose: Get the source code
@@ -146,8 +235,13 @@ sub confVal
 sub header
 {
 	my $title = shift;
+	my $charset = shift;
+	if (not defined $charset)
+	{
+		$charset = $defaultCharset;
+	}
 	my $o;
-	$o = $q->header();
+	$o = $q->header(-charset => $charset);
 	$o .= '<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">'."\n";
 	$o .= '<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en"><head>';
 	$o .= '<title>TGitWebEdit';
@@ -157,7 +251,7 @@ sub header
 	}
 	$o .= '</title>';
 	$o .= '<meta name="robots" content="noindex, nofollow" />';
-	$o .= '<meta http-equiv="Content-Type" content="text/html charset=UTF-8" />';
+	$o .= '<meta http-equiv="Content-Type" content="text/html charset='.$charset.'" />';
 	# YUI
 	$o .= '<link rel="stylesheet" type="text/css" href="http://yui.yahooapis.com/2.8.0r4/build/assets/skins/sam/skin.css" />';
 	$o .= '<script type="text/javascript" src="http://yui.yahooapis.com/2.8.0r4/build/yahoo-dom-event/yahoo-dom-event.js"></script>';
@@ -225,6 +319,7 @@ sub editFile
 	}
 	my $c = '';
 	my $canSave = true;
+	my $charset = $defaultCharset;
 	if (-e $file)
 	{
 		if(-d $file)
@@ -235,6 +330,11 @@ sub editFile
 		{
 			error($file.': is executable. Refusing to edit an executeable file.');
 		}
+		$charset = getCharsetOf($file);
+		if ($charset eq 'binary')
+		{
+			error($file.': is a binary file. Refusing to edit.');
+		}
 		open(my $i,'<',$file);
 		undef $/;
 		$c = <$i>;
@@ -244,7 +344,7 @@ sub editFile
 			$canSave = false;
 		}
 	}
-	print header('Editing '.basename($file));
+	print header('Editing '.basename($file),$charset);
 	if(not $canSave)
 	{
 		print '<b>WARNING: </b>This file is not writeable, you will not be able to save any changes!<br /><br />';
@@ -252,6 +352,7 @@ sub editFile
 	print '<form method="post" action="'.$q->url().'?type=file_save'.'">';
 	print '<div>';
 	print '<input type="hidden" name="type" value="file_save" />';
+	print '<input type="hidden" name="file_charset" value="'.$charset.'" />';
 	print '<input type="hidden" name="filePath" value="'.relativeRestrictedPath($file).'" />';
 	print textEditor($c,$file);
 	print '<br />';
@@ -308,7 +409,9 @@ sub saveFile
 		}
 	}
 
-	open(my $out,'>',$file) or error('Failed to open '.$file.' for writing: '.$!);
+	my $charset = safeCharset($q->param('file_charset'), true);
+
+	open(my $out,'>:Encoding('.$charset.')',$file) or error('Failed to open '.$file.' for writing: '.$!);
 	print {$out} $content;
 	close($out);
 
@@ -366,7 +469,15 @@ function toggleRTE()
 	$o .= '<b>'.basename($file).'</b>:<br />';
 	$o .= '<a href="#" onclick="try { toggleRTE(); } catch(e) {tglog(e);}; return false">Toggle graphical (HTML) editor <span id="rtestatus">on</span></a><br />';
 	$o .= '<textarea name="mainEditor" id="mainEditor" cols="100" rows="30">'.$content.'</textarea>';
-	if ($content  =~ /<\s*(br|p)\s*[^>]>/i and not $content =~ /<\?\s*php/)
+	# The reason we check only for the limited selection of tags
+	# below, rather than any XML/SGML-like tag is because some sites use
+	# includes which are wrapped in <pre></pre>, and if we start editing
+	# those includes in full html mode, things look quite awful.
+	if ($content  =~ /<\s*(br|p)\s*[^>]+>/i and not 
+			(
+				$content =~ /<\?\s*php/ || $content =~ /<\s*script/
+			)
+		)
 	{
 		$o .= '<script type="text/javascript">runToggleRTE = true;</script>';
 	}
@@ -434,7 +545,7 @@ sub fileListing
 			else
 			{
 				$label = '[FILE]';
-				if (not -x $p)
+				if (not -x $p and not getCharsetOf($p) eq 'binary')
 				{
 					$url = URL_editFile($p);
 				}
@@ -514,13 +625,40 @@ sub relativeRestrictedPath
 	return $path;
 }
 
-# Purpose: Sanitize user input to avoid injections
+# Purpose: Sanitize user file path input to avoid injections
 # Usage: path = safePath('path');
 sub safePath
 {
 	my $path = shift;
-	$path =~ s/\.//g;
+	$path =~ s/^\.+//g;
+	$path =~ s{/\.+}{/}g;
 	return $path;
+}
+
+# Purpose: Sanitize user charset input to avoid injections
+# Usage: charset = safeCharset('charset',alwaysReturn?);
+sub safeCharset
+{
+	my $charset = shift;
+	my $alwaysReturn = shift;
+	if ($alwaysReturn)
+	{
+		$alwaysReturn = $defaultCharset;
+	}
+	else
+	{
+		$alwaysReturn = undef;
+	}
+	if (not $charset)
+	{
+		return $alwaysReturn;
+	}
+	$charset =~ s/.*([A-Za-z0-9-]+).*/$1/;
+	if ($charset)
+	{
+		return $charset;
+	}
+	return $alwaysReturn;
 }
 
 # Purpose: Output an error page with the contents supplied and exit
