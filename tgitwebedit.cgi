@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 # tgitwebedit - A tiny web-based editor
-# Copyright (C) Eskild Hustvedt 2009
+# Copyright (C) Eskild Hustvedt 2009, 2010
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Affero General Public License as
@@ -24,7 +24,6 @@ use lib "$FindBin::RealBin/lib/";
 use Try::Tiny;
 use File::Basename qw(basename dirname);
 use autouse 'Cwd' => qw(realpath);
-use autouse 'HTML::Entities' => qw(encode_entities);
 
 use constant { true => 1, false => 0 };
 
@@ -36,6 +35,7 @@ my $instDir = dirname($0);
 my $menuSlurp = false;
 my $defaultCharset = 'UTF-8';
 my %conf;
+my %hasModule;
 
 # Purpose: Load a configuration file
 # Usage: LoadConfigFile(/FILE, \%ConfigHash, \%OptionRegexHash, OnlyValidOptions?);
@@ -112,7 +112,11 @@ sub getCharsetOf
 		{
 			return 'binary';
 		}
-		twarn('Failed to parse output from "file": '.$info.' - defaulting to '.$defaultCharset);
+		elsif($info =~ /:\s+very\s+short\s+file\s+\(no\s+magic\)\s*$/i)
+		{
+			return $defaultCharset;
+		}
+		twarn('Failed to parse output from "file": \''.$info.'\' - defaulting to '.$defaultCharset.' (for '.$path.')');
 		return $defaultCharset;
 	}
 	$info =~ s/\r?\n//g;
@@ -165,7 +169,7 @@ sub assert
 sub twarn
 {
 	my $msg = shift;
-	push(@warnings,$msg);
+	push(@warnings,htmlEncode($msg));
 }
 
 # Purpose: Slurp a file
@@ -200,6 +204,35 @@ sub provideSource
 	exit(0);
 }
 
+# Purpose: Encode HTML
+# Usage: htmlEncode(string);
+sub htmlEncode
+{
+	my $string = shift;
+	if(not defined $hasModule{'HTML::Entities'})
+	{
+		if(eval('use HTML::Entities qw(encode_entities);1;'))
+		{
+			$hasModule{'HTML::Entities'} = true;
+		}
+		else
+		{
+			$hasModule{'HTML::Entities'} = false;
+		}
+	}
+
+	if ($hasModule{'HTML::Entities'})
+	{
+		return encode_entities($string);
+	}
+
+	$string =~ s/&/&amp;/g;
+	$string =~ s/"/&quot;/g;
+	$string =~ s/</&lt;/g;
+	$string =~ s/>/&gt;/g;
+	return $string;
+}
+
 # Purpose: Retrieve a configuration value, automagically loading the
 # 	conf file if needed
 # Usage: val = confVal('name');
@@ -231,7 +264,7 @@ sub confVal
 }
 
 # Purpose: Return the header string (HTML as well as HTTP)
-# Usage: headerString = header(TITLE?);
+# Usage: headerString = header(TITLE?, CHARSET?);
 sub header
 {
 	my $title = shift;
@@ -411,7 +444,7 @@ sub saveFile
 
 	my $charset = safeCharset($q->param('file_charset'), true);
 
-	open(my $out,'>:Encoding('.$charset.')',$file) or error('Failed to open '.$file.' for writing: '.$!);
+	open(my $out,'>:Encoding('.$charset.')',$file) or error('Failed to open '.$file.' for writing: '.$!.$errc);
 	print {$out} $content;
 	close($out);
 
@@ -491,7 +524,7 @@ sub URL_fileSelector
 	my $file = shift;
 	$file = relativeRestrictedPath($file);
 	my $p = $q->url().'?type=file_list&dirPath='.$file;
-	return encode_entities($p);
+	return htmlEncode($p);
 }
 
 # Purpose: Get the URL for a file editor page
@@ -501,7 +534,7 @@ sub URL_editFile
 	my $file = shift;
 	$file = relativeRestrictedPath($file);
 	my $p = $q->url().'?type=file_edit&filePath='.$file;
-	return encode_entities($p);
+	return htmlEncode($p);
 }
 
 # Purpose: Return HTML for listing the files in the directory supplied
@@ -512,8 +545,11 @@ sub fileListing
 	my $l = '<b>'.$dir.'</b>:<br />';
 	if (-w $dir || 1)
 	{
-		$l .= '<span id="mkdir" style="display:none;"><form method="get" action="'.$q->url().'"><span>Directory name: <input type="text" name="dirname" /> <input type="submit" value="Create" /> <input type="hidden" name="type" value="mkdir" /><input type="hidden" name="currDir" value="'.$dir.'" /></span></form></span>';
+		$l .= '<span id="mkdir" style="display:none;"><form method="get" action="'.$q->url().'"><span>Directory name: <input type="text" name="dirname" /> <input type="submit" value="Create" /> <input type="hidden" name="type" value="mkdir" /><input type="hidden" name="dirPath" value="'.htmlEncode(relativeRestrictedPath($dir)).'" /></span></form></span>';
+		$l .= '<span id="mkfile" style="display:none;"><form method="get" action="'.$q->url().'"><span>File name: <input type="text" name="filename" /> <input type="submit" value="Create" /> <input type="hidden" name="type" value="mkfile" /><input type="hidden" name="dirPath" value="'.htmlEncode(relativeRestrictedPath($dir)).'" /></span></form></span>';
 		$l .= '<a id="mkdirP" href="#" onclick="$(\'mkdir\').style.display = \'block\'; $(\'mkdirP\').style.display = \'none\'; return false">New directory</a>';
+		$l .= ' || ';
+		$l .= '<a id="mkfileP" href="#" onclick="$(\'mkfile\').style.display = \'block\'; $(\'mkfileP\').style.display = \'none\'; return false">New file</a>';
 	}
 	$l .= '<table style="border:0px;">';
 	my @dirs = sort(glob($dir.'/*'));
@@ -549,23 +585,30 @@ sub fileListing
 				{
 					$url = URL_editFile($p);
 				}
+				elsif(-x $p)
+				{
+					$label = '[BINX]';
+				}
+				else
+				{
+					$label = '[BIN]';
+				}
 			}
 			$name = $b;
 		}
 		$l .= '<tr><td>';
 		if (confVal('useApacheStock') && confVal('useApacheStock') eq 'true')
 		{
-			if ($label eq '[DIR]')
+			my %stockMap = (
+				'[DIR]' => '<img src="/icons/folder.png" alt="[DIR]" />',
+				'[UP]' => '<img src="/icons/back.png" alt="[UP]" />',
+				'[FILE]' => '<img src="/icons/text.png" alt="[FILE]" />',
+				'[BIN]' => '<img src="/icons/binary.png" alt="[BIN]" />',
+				'[BINX]' => '<img src="/icons/unknown.png" alt="[BIN]" />',
+			);
+			if(defined $stockMap{$label})
 			{
-				$l .= '<img src="/icons/folder.png" alt="[DIR]" />';
-			}
-			elsif($label eq '[UP]')
-			{
-				$l .= '<img src="/icons/back.png" alt="[UP]" />';
-			}
-			elsif($label eq '[FILE]')
-			{
-				$l .= '<img src="/icons/text.png" alt="[FILE]" />';
+				$l .= $stockMap{$label};
 			}
 			else
 			{
@@ -594,9 +637,7 @@ sub fileListing
 sub fileSelector
 {
 	my $path = $q->param('dirPath');
-	$path = defined $path ? safePath($path) : '.';
-
-	$path = realpath(confVal('restrictedPath').'/'.$path);
+	$path = fullSafePath($path);
 	if(not defined $path or not length $path)
 	{
 		error('Illegal path');
@@ -621,8 +662,43 @@ sub relativeRestrictedPath
 	my $path = shift;
 	$path = realpath($path);
 	my $rpath = confVal('restrictedPath');
-	$path =~ s/$rpath//;
+	$path =~ s/^$rpath//;
+	if (not length $path or not $path =~ /[^\.]/)
+	{
+		return '/';
+	}
 	return $path;
+}
+
+# Purpose: Create a new directory
+# Usage: createDirectory(dir);
+sub createDirectory
+{
+	my $parentDir = $q->param('dirPath');
+	error('dirPath missing') if not $parentDir or not length $parentDir;
+	$parentDir = fullSafePath($parentDir);
+	error('dirPath does not exist') if not -d $parentDir;
+
+	my $dir = $q->param('dirname');
+	error('You need to enter a directory name.') if not defined $dir or not length $dir;
+	if ($dir =~ m{/})
+	{
+		error($dir.': can not contain /');
+	}
+	$dir = $parentDir.'/'.safePath($dir);
+	if(-f $dir)
+	{
+		error($dir.': exists and is a file');
+	}
+	elsif(-d $dir)
+	{
+		error($dir.': exists and is a directory');
+	}
+	mkdir($dir) or error('Failed to create directory at '.$dir.': '.$!);
+	print header()."\n";
+	print 'Created directory: <i>'.htmlEncode($dir).'</i><br /><br />';
+	print fileListing($dir)."\n";
+	print footer();
 }
 
 # Purpose: Sanitize user file path input to avoid injections
@@ -632,6 +708,16 @@ sub safePath
 	my $path = shift;
 	$path =~ s/^\.+//g;
 	$path =~ s{/\.+}{/}g;
+	return $path;
+}
+
+# Purpose. Get a safe path relative to restrictedPath
+# Usage: path = fullSafePath(path);
+sub fullSafePath
+{
+	my $path = shift;
+	$path = defined $path ? safePath($path) : '.';
+	$path = realpath(confVal('restrictedPath').'/'.$path);
 	return $path;
 }
 
@@ -671,7 +757,7 @@ sub error
 		print header('Error');
 	}
 	print '<b>Error: </b>';
-	print $e;
+	print htmlEncode($e);
 	print footer();
 	exit(1);
 }
@@ -726,6 +812,10 @@ sub main
 	elsif($type eq 'file_save')
 	{
 		saveFile();
+	}
+	elsif($type eq 'mkdir')
+	{
+		createDirectory();
 	}
 	elsif(defined $type and length($type))
 	{
