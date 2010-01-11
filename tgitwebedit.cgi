@@ -337,11 +337,27 @@ sub footer
 sub editFile
 {
 	my $file = $q->param('filePath');
+	if (defined $q->param('dirPath'))
+	{
+		my $newFile = $q->param('filename');
+		my $dirPath = $q->param('dirPath');
+
+		if(not length $dirPath)
+		{
+			error('No dirPath supplied');
+		}
+		elsif(not length $newFile)
+		{
+			error('You need to enter a file name');
+		}
+		$file = $dirPath.'/'.$newFile;
+	}
+
 	if(not defined $file or not length $file)
 	{
 		error('No filePath supplied');
 	}
-	$file = realpath(confVal('restrictedPath').'/'.$file);
+	$file = fullSafePath($file);
 	if(not defined $file or not length $file)
 	{
 		error('Illegal path');
@@ -391,7 +407,14 @@ sub editFile
 	print '<br />';
 	if ($canSave)
 	{
-		print '<input type="submit" value="Save file" />&nbsp;';
+		if (-e $file)
+		{
+			print '<input type="submit" value="Save file" />&nbsp;';
+		}
+		else
+		{
+			print '<input type="submit" value="Create and save file" />&nbsp;';
+		}
 	}
 	# FIXME: Add some magic so that if the back fails, we still forward
 	# to url()
@@ -415,12 +438,12 @@ sub saveFile
 	my $file = $q->param('filePath');
 	if(not defined $file or not length $file)
 	{
-		error('saveFile(): no filePath!'.$errc);
+		error('saveFile(): no filePath!'.$errc,true);
 	}
 	$file = realpath(confVal('restrictedPath').'/'.$file);
 	if(not defined $file or not length $file)
 	{
-		error('Illegal path'.$errc);
+		error('Illegal path'.$errc,true);
 	}
 	elsif ($file eq realpath($instDir.'/tgitwebedit.conf'))
 	{
@@ -430,23 +453,33 @@ sub saveFile
 	{
 		if(-d $file)
 		{
-			error($file.': is a directory'.$errc);
+			error($file.': is a directory'.$errc,true);
 		}
 		elsif(-x $file)
 		{
-			error($file.': is executable. Refusing to edit an executeable file.'.$errc);
+			error($file.': is executable. Refusing to edit an executeable file.'.$errc,true);
 		}
 		elsif(not -w $file)
 		{
-			error($file.': is not writeable by tgitwebedit (running as UID '.$<.'). Data could not be saved.'.$errc);
+			error($file.': is not writeable by tgitwebedit (running as UID '.$<.'). Data could not be saved.'.$errc,true);
 		}
 	}
 
-	my $charset = safeCharset($q->param('file_charset'), true);
+	my $setMode = false;
 
-	open(my $out,'>:Encoding('.$charset.')',$file) or error('Failed to open '.$file.' for writing: '.$!.$errc);
+	if(not -e $file)
+	{
+		$setMode = true;
+	}
+
+	open(my $out,'>',$file) or error('Failed to open '.$file.' for writing: '.$!.$errc,true);
 	print {$out} $content;
 	close($out);
+
+	if ($setMode)
+	{
+		chmod(0644,$file);
+	}
 
 	if (confVal('enableGit'))
 	{
@@ -542,14 +575,14 @@ sub URL_editFile
 sub fileListing
 {
 	my $dir = shift;
-	my $l = '<b>'.$dir.'</b>:<br />';
+	my $l = '<b>'.relativeRestrictedPath($dir).'</b>:<br />';
 	if (-w $dir || 1)
 	{
 		$l .= '<span id="mkdir" style="display:none;"><form method="get" action="'.$q->url().'"><span>Directory name: <input type="text" name="dirname" /> <input type="submit" value="Create" /> <input type="hidden" name="type" value="mkdir" /><input type="hidden" name="dirPath" value="'.htmlEncode(relativeRestrictedPath($dir)).'" /></span></form></span>';
-		$l .= '<span id="mkfile" style="display:none;"><form method="get" action="'.$q->url().'"><span>File name: <input type="text" name="filename" /> <input type="submit" value="Create" /> <input type="hidden" name="type" value="mkfile" /><input type="hidden" name="dirPath" value="'.htmlEncode(relativeRestrictedPath($dir)).'" /></span></form></span>';
-		$l .= '<a id="mkdirP" href="#" onclick="$(\'mkdir\').style.display = \'block\'; $(\'mkdirP\').style.display = \'none\'; return false">New directory</a>';
-		$l .= ' || ';
-		$l .= '<a id="mkfileP" href="#" onclick="$(\'mkfile\').style.display = \'block\'; $(\'mkfileP\').style.display = \'none\'; return false">New file</a>';
+		$l .= '<span id="mkfile" style="display:none;"><form method="get" action="'.$q->url().'"><span>File name: <input type="text" name="filename" /> <input type="submit" value="Create" /> <input type="hidden" name="type" value="file_edit" /><input type="hidden" name="dirPath" value="'.htmlEncode(relativeRestrictedPath($dir)).'" /></span></form></span>';
+		$l .= '<a id="mkdirP" href="#" onclick="$(\'mkdir\').style.display = \'block\'; $(\'mkdirP\').style.display = \'none\'; $(\'mkSep\').style.display = \'none\'; return false">New directory</a>';
+		$l .= '<span id="mkSep"> || </span>';
+		$l .= '<a id="mkfileP" href="#" onclick="$(\'mkfile\').style.display = \'block\'; $(\'mkfileP\').style.display = \'none\'; $(\'mkSep\').style.display = \'none\'; return false">New file</a>';
 	}
 	$l .= '<table style="border:0px;">';
 	my @dirs = sort(glob($dir.'/*'));
@@ -752,12 +785,20 @@ sub safeCharset
 sub error
 {
 	my $e = shift;
+	my $noEncode = shift;
 	if(not $reqHeader)
 	{
 		print header('Error');
 	}
 	print '<b>Error: </b>';
-	print htmlEncode($e);
+	if ($noEncode)
+	{
+		print $e;
+	}
+	else
+	{
+		print htmlEncode($e);
+	}
 	print footer();
 	exit(1);
 }
