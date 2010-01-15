@@ -5,6 +5,7 @@ prepare:
 clean:
 	rm -f *~
 	rm -rf tgitwebedit-$(VERSION)
+	rm -f tgitwebedit-*.tar.bz2
 test:
 	perl -Ilib -c tgitwebedit.cgi
 # Create a manpage from the POD
