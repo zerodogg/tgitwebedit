@@ -18,10 +18,7 @@
 use strict;
 use warnings;
 use CGI;
-use FindBin;
 use IPC::Open3 qw(open3);
-use lib "$FindBin::RealBin/lib/";
-use Try::Tiny;
 use File::Basename qw(basename dirname);
 use autouse 'Cwd' => qw(realpath);
 
@@ -910,23 +907,24 @@ sub main
 }
 
 # Run main() and perform some additional error handling in the process
-try
+my $r = eval
 {
 	main();
-}
-catch
+	1;
+};
+my $e = $@;
+if (!$r)
 {
-	my $e = $_;
-	try
+	$r = eval
 	{
 		error('main() error: '.$e);
-	}
-	catch
-	{
-		die('Error when running main(): '.$e."\n\n".'Error during error() as well: '.$_);
+		1;
 	};
-
-};
+	if (!$r)
+	{
+		die('Error when running main(): '.$e."\n\n".'Error during error() as well: '.$@);
+	}
+}
 
 __END__
 
