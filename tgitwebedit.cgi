@@ -417,13 +417,13 @@ sub editFile
 		error('No filePath supplied');
 	}
 	$file = fullSafePath($file);
-	if(not defined $file or not length $file)
-	{
-		error('Illegal path');
-	}
-	elsif ($file eq realpath($instDir.'/tgitwebedit.conf'))
+	if ($file and $file eq realpath($instDir.'/tgitwebedit.conf'))
 	{
 		error('Editing the tgitwebedit.conf file is not permitted.');
+	}
+	elsif(not defined $file or not length $file or ignoreFile($file))
+	{
+		error('Illegal path');
 	}
 	my $c = '';
 	my $canSave = true;
