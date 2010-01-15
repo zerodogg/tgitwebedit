@@ -454,9 +454,7 @@ sub editFile
 			print '<input type="submit" value="Create and save file" />&nbsp;';
 		}
 	}
-	# FIXME: Add some magic so that if the back fails, we still forward
-	# to url()
-	print '<a href="'.$q->url().'"><input type="button" value="Cancel and discard changes" onclick="window.history.back(); return false;" /></a>';
+	print '<a href="'.$q->url().'"><input type="button" value="Cancel and discard changes" onclick="window.history.back(); if(window.history.length > 1) return false" /></a>';
 	print '</div>';
 	print '</form>';
 	print footer();
