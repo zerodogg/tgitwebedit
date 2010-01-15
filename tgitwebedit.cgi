@@ -47,11 +47,13 @@ sub LoadConfigFile
 	my ($File, $ConfigHash, $OptionRegex, $OnlyValidOptions) = @_;
 	assert(@_);
 
-	open(my $CONFIG, '<', "$File") or do {
-		warn(sprintf('Unable to read the configuration settings from %s: %s', $File, $!));
+	open(my $CONFIG, '<', "$File") or do
+	{
+		twarn(sprintf('Unable to read the configuration settings from %s: %s', $File, $!));
 		return(0);
 	};
-	while(<$CONFIG>) {
+	while(<$CONFIG>)
+	{
 		next if m/^\s*(#.*)?$/;
 		next if not m/=/;
 		chomp;
@@ -60,18 +62,22 @@ sub LoadConfigFile
 		$Option =~ s/^\s*(\S+)\s*=.*/$1/;
 		$Value =~ s/^\s*\S+\s*=\s*(.*)\s*/$1/;
 		if($OnlyValidOptions) {
-			unless(defined($OptionRegex->{$Option})) {
-				warn("Unknown configuration option \"$Option\" (=$Value) in $File: Ignored.");
+			unless(defined($OptionRegex->{$Option}))
+			{
+				twarn("Unknown configuration option \"$Option\" (=$Value) in $File: Ignored.");
 				next;
 			}
 		}
-		unless(defined($Value)) {
-			warn("Empty value for option $Option in $File");
+		unless(defined($Value))
+		{
+			twarn("Empty value for option $Option in $File");
 		}
-		if(defined($OptionRegex) and defined($OptionRegex->{$Option})) {
+		if(defined($OptionRegex) and defined($OptionRegex->{$Option}))
+		{
 			my $MustMatch = $OptionRegex->{$Option};
-			unless ($Value =~ /$MustMatch/) {
-				warn("Invalid setting of $Option (=$Value) in the config file: Must match $OptionRegex->{Option}.");
+			unless ($Value =~ /$MustMatch/)
+			{
+				twarn("Invalid setting of $Option (=$Value) in the config file: Must match $OptionRegex->{Option}.");
 				next;
 			}
 		}
@@ -218,11 +224,29 @@ sub ignoreFile
 		}
 		$sessionCache{ignores} = \@regexes;
 	}
-	foreach my $ent (@regexes)
+
+	my @names = ($name);
+	if(realpath($name) ne $name)
 	{
-		if ($name =~ $ent)
+		push(@names,realpath($name));
+	}
+	
+	foreach my $fname (@names)
+	{
+		if (
+			$fname eq realpath($instDir.'/tgitwebedit.conf')
+				or
+			$fname eq realpath($0)
+			)
 		{
 			return true;
+		}
+		foreach my $ent (@regexes)
+		{
+			if ($fname =~ $ent)
+			{
+				return true;
+			}
 		}
 	}
 	return false;
@@ -232,7 +256,7 @@ sub ignoreFile
 # Usage: provideSource();
 sub provideSource
 {
-	my $f = slurp($0) or die('Fatal: failed to read self');
+	my $f = slurp($0) or error('Fatal: failed to read self');
 	print $q->header(-type => 'text/plain');
 	print $f;
 	exit(0);
@@ -419,10 +443,9 @@ sub editFile
 		{
 			error($file.': is a binary file. Refusing to edit.');
 		}
-		open(my $i,'<',$file);
-		undef $/;
-		$c = <$i>;
-		close($i);
+		$c = slurp($file);
+		error('Failed to read '.$file.': '.$!) if not defined $c;
+
 		if(not -w $file)
 		{
 			$canSave = false;
@@ -474,13 +497,9 @@ sub saveFile
 		error('saveFile(): no filePath!'.$errc,true);
 	}
 	$file = realpath(confVal('restrictedPath').'/'.$file);
-	if(not defined $file or not length $file)
+	if(not defined $file or not length $file or ignoreFile($file))
 	{
 		error('Illegal path'.$errc,true);
-	}
-	elsif ($file eq realpath($instDir.'/tgitwebedit.conf'))
-	{
-		error('Editing the tgitwebedit.conf file is not permitted.');
 	}
 	if (-e $file)
 	{
@@ -514,14 +533,15 @@ sub saveFile
 		chmod(0644,$file);
 	}
 
-	if (confVal('enableGit'))
-	{
-		system('git','add',$file);
-		system('git','commit','-m', 'Changes made by '.$q->remote_host());
-	}
-
 	print header();
 	print 'The file was saved successfully';
+	if (confVal('enableGit'))
+	{
+		print '<pre>';
+		system('git','add',$file);
+		system('git','commit','-m', 'Changes made by '.$q->remote_host());
+		print '</pre>';
+	}
 	print footer();
 }
 
@@ -565,7 +585,7 @@ function toggleRTE()
 		$("rtestatus").innerHTML = "off";
 	}
 } /* ]]> */</script>';
-	$o .= '<b>'.basename($file).'</b>:<br />';
+	$o .= '<b>'.htmlEncode(basename($file)).'</b>:<br />';
 	$o .= '<a href="#" onclick="try { toggleRTE(); } catch(e) {tglog(e);}; return false">Toggle graphical (HTML) editor <span id="rtestatus">on</span></a><br />';
 	$o .= '<textarea name="mainEditor" id="mainEditor" cols="100" rows="30">'.$content.'</textarea>';
 	# The reason we check only for the limited selection of tags
@@ -689,7 +709,7 @@ sub fileListing
 		$l .= '</td><td>';
 		if(defined $url and length $url)
 		{
-			$name = '<a href="'.$url.'">'.$name.'</a>';
+			$name = '<a href="'.$url.'">'.htmlEncode($name).'</a>';
 		}
 		$l .= $name;
 		$l .= '</td></tr>';
