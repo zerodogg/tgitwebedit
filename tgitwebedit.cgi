@@ -35,7 +35,9 @@ my $instDir = dirname($0);
 my $menuSlurp = false;
 my $defaultCharset = 'UTF-8';
 my %conf;
-my %hasModule;
+my %sessionCache = (
+	'hasModule' => {},
+);
 
 # Purpose: Load a configuration file
 # Usage: LoadConfigFile(/FILE, \%ConfigHash, \%OptionRegexHash, OnlyValidOptions?);
@@ -194,6 +196,41 @@ sub InPath
 	foreach (split /:/, $ENV{PATH}) { if (-x "$_/@_" and ! -d "$_/@_" ) {	return "$_/@_"; } } return false;
 }
 
+# Purpose: Check if a file should be ignored
+# Usage: bool = ignoreFile(FILE);
+sub ignoreFile
+{
+	my $name = shift;
+	my @regexes;
+	if (defined $sessionCache{ignores})
+	{
+		@regexes = @{$sessionCache{ignores}};
+	}
+	else
+	{
+		my $confVal = confVal('ignoreFiles');
+		foreach my $entry (split(/,/,$confVal))
+		{
+			# Escape \
+			$entry =~ s/\\/\\\\/g;
+			# Escape metacharacters
+			$entry =~ s/(\.|\$|\^|\+|\?|\(|\)|\{|\}|\|)/\\$1/g;
+			# Turn * into .*
+			$entry =~ s/\*/.*/g;
+			push(@regexes, qr/^$entry$/);
+		}
+		$sessionCache{ignores} = \@regexes;
+	}
+	foreach my $ent (@regexes)
+	{
+		if ($name =~ $ent)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
 # Purpose: Get the source code
 # Usage: provideSource();
 sub provideSource
@@ -209,19 +246,19 @@ sub provideSource
 sub htmlEncode
 {
 	my $string = shift;
-	if(not defined $hasModule{'HTML::Entities'})
+	if(not defined $sessionCache{'hasModule'}{'HTML::Entities'})
 	{
 		if(eval('use HTML::Entities qw(encode_entities);1;'))
 		{
-			$hasModule{'HTML::Entities'} = true;
+			$sessionCache{'hasModule'}{'HTML::Entities'} = true;
 		}
 		else
 		{
-			$hasModule{'HTML::Entities'} = false;
+			$sessionCache{'hasModule'}{'HTML::Entities'} = false;
 		}
 	}
 
-	if ($hasModule{'HTML::Entities'})
+	if ($sessionCache{'hasModule'}{'HTML::Entities'})
 	{
 		return encode_entities($string);
 	}
@@ -246,6 +283,7 @@ sub confVal
 			'restrictedPath' => '.',
 			'enableGit' => 'true',
 			'useApacheStock' => 'true',
+			'ignoreFiles' => '*.pm,*.cgi',
 		);
 		if (-e './tgitwebedit.conf')
 		{
@@ -614,7 +652,8 @@ sub fileListing
 			else
 			{
 				$label = '[FILE]';
-				if (not -x $p and not getCharsetOf($p) eq 'binary')
+				my $ignore = ignoreFile($p);
+				if (not -x $p and not getCharsetOf($p) eq 'binary' and not $ignore)
 				{
 					$url = URL_editFile($p);
 				}
@@ -622,7 +661,7 @@ sub fileListing
 				{
 					$label = '[BINX]';
 				}
-				else
+				elsif(not $ignore)
 				{
 					$label = '[BIN]';
 				}
@@ -1001,6 +1040,10 @@ default installation is included below.
 	# If this is set to true then tgitwebedit will attempt to use apache
 	# stock icons for directories and files.
 	useApacheStock=true
+
+	# This is a comma-separated list of filenames to ignore. * works
+	# as a wildcard.
+	ignoreFiles=*.pm,*.cgi
 
 =head1 CUSTOMIZATION
 
