@@ -978,6 +978,8 @@ tgitwebedit does not contain any builtin authentication. Therefore
 you will need to use basic http authentication. Now is the time
 to configure this, ie. in your .htaccess and .htpasswd files.
 
+=back
+
 =head3 Instructions on setting up basic HTTP auth for apache:
 
 Create a I<.htaccess> like so:
@@ -992,6 +994,8 @@ distros put this into PATH, so you may need to use locate to find
 out where it is.
 
 	$ htpasswd .htpasswd USER
+
+=over
 
 =item B<Step 4> - Upload
 
