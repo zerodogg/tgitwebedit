@@ -537,12 +537,84 @@ sub saveFile
 	print 'The file was saved successfully';
 	if (confVal('enableGit'))
 	{
-		print '<pre>';
-		system('git','add',$file);
-		system('git','commit','-m', 'Changes made by '.$q->remote_host());
+
+		print '<pre>Git:'."\n";
+		commitFile($file);
 		print '</pre>';
 	}
 	print footer();
+}
+
+# Purpose: Commit changes to a file to git
+# Usage: commitFile(file);
+# Note: Needs to have '<pre></pre>' wrapped around it for output. Will
+# 	not return output, but print directly to STDOUT.
+sub commitFile
+{
+	my $file = shift;
+	$ENV{GIT_PAGER} = 'cat';
+	my $pid = open3(my $in, my $out, my $err, 'git','diff',$file);
+	if(not $pid)
+	{
+		twarn('Failed to check "git diff", will attempt to commit without checking.');
+	}
+	else
+	{
+		my $s = $/;
+		$/ = undef;
+		my $info_out = <$out>;
+		my $info_err = <$err>;
+		$/ = $s;
+		waitpid($pid,0);
+
+		my $outChecks = $info_err;
+		$outChecks    = $info_out if not defined $info_err;
+
+		if(defined $outChecks)
+		{
+			if (
+				$outChecks =~ /fatal:\s+Not\s+a\s+git\s+repository/ or
+				$outChecks =~ /usage:\s+git\s+diff/ or
+				$outChecks =~ /fatal.*takes\s+two\s+paths/
+			)
+			{
+				print "This directory appears to not have been prepared for use with git.\nPlease read the installation section of the tgitwebedit manual.\n";
+				return;
+			}
+			elsif($outChecks =~ /fatal:/)
+			{
+				print "An unknown error appears to have occurred when attempting to run git diff.\n";
+				print "This most likely represents a bug or incompatibility in tgitwebedit (though\n";
+				print " it could also reflect a badly configured git repository)\n";
+				print "Git said: $outChecks";
+				return;
+			}
+		}
+		# If there is no output on either _out or _err then there's nothing to commit.
+		if(
+			(not length $info_out)
+				or
+			($info_out =~ /^\s+$/)
+		)
+		{
+			print 'No changes to commit.';
+			if(defined $info_err and length($info_err))
+			{
+				print "\ngit appears to have output an unknown error as well: $info_err";
+			}
+			return;
+		}
+	}
+	# Make git info on STDERR go to the web browser
+
+	no warnings 'once'; # If not, perl will warn about SAVED_ERR only being used once
+	open(SAVED_ERR,">&STDERR");
+	open(STDERR,'>&STDOUT');
+
+	system('git','add',$file);
+	system('git','commit','-m', 'Changes made by '.$q->remote_host(),'--author','TGitWebEdit user <user@'.$q->remote_host().'>');
+
+	open(STDERR,">&SAVED_ERR");
 }
 
 # Purpose: Return the HTML needed for a text editor with the contents
