@@ -101,6 +101,9 @@ sub getCharsetOf
 		twarn('Tried to get charset of non-existing file: '.$path);
 		return $defaultCharset;
 	}
+
+	setLocaleVars();
+
 	my $pid = open3(my $in, my $out, my $err,'file','--mime',$path);
 	if(not $pid)
 	{
@@ -197,6 +200,25 @@ sub slurp
 sub InPath
 {
 	foreach (split /:/, $ENV{PATH}) { if (-x "$_/@_" and ! -d "$_/@_" ) {	return "$_/@_"; } } return false;
+}
+
+# Purpose: Set locale-related env vars
+# Usage: setLocaleVars();
+sub setLocaleVars
+{
+	my $locale = shift;
+	if(not $locale)
+	{
+		$locale = 'C';
+	}
+	return if $sessionCache{"hasSetLocaleTo_$locale"};
+	$ENV{LC_ALL} = $locale;
+	foreach my $k(keys(%ENV))
+	{
+		next if not $k =~ /^(LC_|LANG)/;
+		$ENV{$k} = $locale;
+	}
+	$sessionCache{"hasSetLocaleTo_$locale"} = true;
 }
 
 # Purpose: Check if a file should be ignored
