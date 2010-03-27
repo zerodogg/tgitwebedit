@@ -1051,7 +1051,7 @@ for revision control of changes.
 
 tgitwebedit is a simple web-based editor for static content that can use git
 for revision control of changes. For lack of a better term it can be called
-a single-file "CMS", althoguh it doesn't actually provide any means of serving
+a single-file "CMS", although it doesn't actually provide any means of serving
 the content, or managing how something is served. It provides a simple web UI
 for editing static files that can then be served through existing scripts,
 or as completely static HTML pages.
